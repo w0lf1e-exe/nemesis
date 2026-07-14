@@ -1,0 +1,15 @@
+{
+  "name": "nemesis",
+  "version": "0.1.0",
+  "private": true,
+  "description": "N.E.M.E.S.I.S — Network Exploitation & Multi-Stage Engagement Security Intelligence Center. Personal offensive-security & development console by injexion.io.",
+  "scripts": {
+    "install:all": "npm install --prefix server && npm install --prefix web",
+    "dev": "concurrently -n SERVER,WEB -c cyan,magenta \"npm:dev --prefix server\" \"npm:dev --prefix web\"",
+    "build": "npm run build --prefix server && npm run build --prefix web",
+    "start": "npm run start --prefix server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
