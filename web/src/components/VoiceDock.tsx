@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
 import { emitCommand } from "../voice/commandBus.js";
 import { parseCommand } from "../voice/parseCommand.js";
+import { broadcastPartial } from "../sync/bus.js";
 import {
   isSupported as ttsSupported,
   isVoiceEnabled,
@@ -27,6 +28,10 @@ export function VoiceDock() {
 
   useEffect(() => onSpeakingChange(setSpeaking), []);
   useEffect(() => onVoiceEnabledChange(setVoiceOn), []);
+
+  useEffect(() => {
+    broadcastPartial("voice", { transcript, speaking, listening: listenState === "listening" });
+  }, [transcript, speaking, listenState]);
 
   function toggleVoice() {
     const next = !voiceOn;

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
+import { broadcastPartial } from "../sync/bus.js";
 
 interface Status {
   hostname: string;
@@ -39,6 +40,14 @@ export function SystemPanel({ onStatus }: { onStatus?: (s: Status) => void }) {
           setStatus(s);
           setError(null);
           onStatus?.(s);
+          broadcastPartial("system", {
+            hostname: s.hostname,
+            platform: s.platform,
+            cpuCount: s.cpuCount,
+            hostUptimeSeconds: s.hostUptimeSeconds,
+            memory: s.memory,
+          });
+          broadcastPartial("online", true);
         }
       } catch {
         if (!cancelled) setError("lost link to core");

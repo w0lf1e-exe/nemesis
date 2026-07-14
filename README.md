@@ -7,8 +7,10 @@ A personal offensive-security & development console, built by **injexion.io**. T
 ## What it is
 
 - **A real backend** (Node/Express + TypeScript) that spawns actual security tools — `nmap`, `whois`, `dig` — and your local `git` repo, and streams their live output to the browser over Server-Sent Events.
-- **A branded HUD frontend** (React + Vite + TypeScript) with the injexion.io look: dark HUD, cyan/red glow, animated status strip, module cards.
-- **Security-first by construction**: every offensive-tool route validates its target against a strict hostname/IP grammar, every process is launched via `spawn()` with an argument array (never a shell string, so there is no injection surface), scan flags come from a fixed server-side whitelist of profiles (never raw user flags), every API call requires a bearer key, and there's a client-side authorization checkbox that gates recon actions.
+- **A workshop-HUD frontend** (React + Vite + TypeScript) modeled on the Mark II/III Iron Man interface: an arc-reactor-style dial with a live clock and status readout, a rotating wireframe hologram at its center (WebGL/three.js), angular corner-bracketed panels, and drifting light motes across the backdrop — all in the injexion.io cyan/red palette.
+- **A voice interface**: NEMESIS speaks job status aloud, and a push-to-talk mic accepts a small command grammar ("quick scan example.com", "git status", "find subdomains for target.com").
+- **A genuine external-display mode**: open a mirrored, receive-only HUD in a second window — real second-monitor placement where the browser supports it (Window Management API), a plain draggable popup everywhere else — synced live via `BroadcastChannel` to whatever's running in the primary console.
+- **Security-first by construction**: every offensive-tool route validates its target against a strict hostname/IP grammar, every process is launched via `spawn()` with an argument array (never a shell string, so there is no injection surface), scan flags come from a fixed server-side whitelist of profiles (never raw user flags), every API call requires a bearer key, and there's a client-side authorization checkbox that gates recon actions — including by voice.
 
 ## Architecture
 
@@ -25,6 +27,12 @@ nemesis/
 | **Recon** | `nmap` (ping sweep / quick / service-version / full-port profiles), `whois`, `dig`, and passive subdomain enumeration via crt.sh certificate-transparency logs |
 | **Dev** | `git status` / `log` / `diff --stat` / `branch` / `remote` / `show-ref` against a configured local repo |
 | **System** | Live host telemetry — uptime, memory, CPU, platform |
+
+## The interface
+
+- **HUD core**: the centerpiece dial (`web/src/components/HudCore.tsx`) renders concentric tick/dashed rings in CSS/SVG around a `three.js` wireframe hologram (`web/src/three/Hologram.tsx`). The hologram shape itself reacts to what's running — an icosahedron core at idle, a wireframe globe while a scan is active, a torus knot while a git job runs. three.js is lazy-loaded on first mount so it never blocks the initial page load.
+- **Voice**: `web/src/voice/speech.ts` wraps the Web Speech API for output (toggle in the voice dock), `web/src/voice/parseCommand.ts` is the small closed-vocabulary grammar for push-to-talk input, and `web/src/voice/commandBus.ts` dispatches parsed commands to whichever panel owns that action — so voice and buttons share one code path.
+- **External display**: click **⧉ external display** in the header. `web/src/sync/externalWindow.ts` tries the [Window Management API](https://developer.mozilla.org/en-US/docs/Web/API/Window_Management_API) to place the new window on a secondary monitor and size it to fill it; if that permission isn't granted (or the browser doesn't support it), it falls back to a normal popup you can drag over yourself and click "fullscreen" on. Once open, `?display=external` in the URL switches to `web/src/ExternalDisplay.tsx` — a receive-only mirror that never runs actions itself, fed live by `web/src/sync/bus.ts` (`BroadcastChannel`, same-origin/same-browser only, so it adds no new network exposure). Panels broadcast their own state (`ReconPanel`, `DevPanel`, `SystemPanel`, `VoiceDock`); the external view — and the primary dashboard's own hologram — just subscribe.
 
 ## Getting started
 
@@ -53,6 +61,8 @@ If you skip setting `NEMESIS_API_KEY`, the server generates a throwaway key each
 # Debian/Ubuntu
 sudo apt install nmap whois dnsutils
 ```
+
+Voice output (speech synthesis) works in any modern browser. Voice *input* (push-to-talk) needs the Web Speech API's `SpeechRecognition`, which today means Chrome/Edge/Chromium — the mic button shows disabled with an explanatory tooltip elsewhere. Second-monitor auto-placement for the external display needs the Window Management API (Chromium, and only once you've granted the permission); it degrades to a plain draggable popup everywhere else.
 
 ## Security notes
 

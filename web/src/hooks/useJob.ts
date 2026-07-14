@@ -5,21 +5,21 @@ import { speak } from "../voice/speech.js";
 export function useJob() {
   const [output, setOutput] = useState("");
   const [status, setStatus] = useState<string | undefined>();
+  const [label, setLabel] = useState("Job");
   const stopRef = useRef<(() => void) | null>(null);
-  const labelRef = useRef("Job");
 
   useEffect(() => () => stopRef.current?.(), []);
 
   useEffect(() => {
     if (!status || status === "running") return;
-    const label = labelRef.current;
     const phrase =
       status === "done" ? `${label} complete.` : status === "error" ? `${label} failed.` : `${label} stopped.`;
     speak(phrase);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
-  async function run(launch: () => Promise<{ job: JobMeta }>, label = "Job") {
-    labelRef.current = label;
+  async function run(launch: () => Promise<{ job: JobMeta }>, jobLabel = "Job") {
+    setLabel(jobLabel);
     stopRef.current?.();
     setOutput("");
     setStatus("running");
@@ -37,5 +37,5 @@ export function useJob() {
     }
   }
 
-  return { output, status, running: status === "running", run };
+  return { output, status, label, running: status === "running", run };
 }

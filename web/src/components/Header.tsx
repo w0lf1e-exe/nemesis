@@ -1,3 +1,5 @@
+import { openExternalDisplay } from "../sync/externalWindow.js";
+
 function BrandMark() {
   return (
     <svg width="42" height="42" viewBox="0 0 100 100" className="brand-mark">
@@ -43,6 +45,9 @@ export function Header({ online, hostname }: { online: boolean; hostname?: strin
             host: <b>{hostname}</b>
           </span>
         )}
+        <button className="icon-btn" onClick={() => openExternalDisplay()} title="Open a mirrored HUD view for a second monitor or projector">
+          ⧉ external display
+        </button>
         <span className="brand-org">INJEXION.IO</span>
       </div>
     </header>

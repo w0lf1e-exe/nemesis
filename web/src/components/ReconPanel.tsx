@@ -3,6 +3,7 @@ import { api, ApiError } from "../api.js";
 import { onCommand } from "../voice/commandBus.js";
 import { speak } from "../voice/speech.js";
 import { useJob } from "../hooks/useJob.js";
+import { broadcastPartial } from "../sync/bus.js";
 import { ModuleCard } from "./ModuleCard.js";
 import { Terminal } from "./Terminal.js";
 
@@ -25,6 +26,12 @@ export function ReconPanel() {
   const [subLoading, setSubLoading] = useState(false);
 
   const canRun = authorized && target.trim().length > 0 && !job.running;
+
+  // Mirror job state to the external-display window, if one is open.
+  useEffect(() => {
+    broadcastPartial("recon", { label: job.label, output: job.output, status: job.status, target });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job.output, job.status, job.label, target]);
 
   async function runSubdomains(explicitTarget?: string) {
     const t = (explicitTarget ?? target).trim();

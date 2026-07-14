@@ -3,6 +3,7 @@ import { api } from "../api.js";
 import { onCommand } from "../voice/commandBus.js";
 import { speak } from "../voice/speech.js";
 import { useJob } from "../hooks/useJob.js";
+import { broadcastPartial } from "../sync/bus.js";
 import { ModuleCard } from "./ModuleCard.js";
 import { Terminal } from "./Terminal.js";
 
@@ -28,6 +29,11 @@ export function DevPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
+
+  useEffect(() => {
+    broadcastPartial("dev", { label: job.label, output: job.output, status: job.status });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job.output, job.status, job.label]);
 
   return (
     <ModuleCard title="Dev Module" tag="GIT">
