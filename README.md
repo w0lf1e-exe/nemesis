@@ -36,22 +36,19 @@ nemesis/
 
 ## Getting started
 
+This is a personal tool meant to run **on your own machine** — its recon module fires real scans from your real network, and its dev module reads your real local git repos. Requires [Node.js](https://nodejs.org) 20+.
+
 ```bash
-npm run install:all      # installs server/ and web/ deps
-
-cp server/.env.example server/.env
-# generate a real key:
-openssl rand -hex 32
-# paste it into server/.env as NEMESIS_API_KEY
-
-cp web/.env.example web/.env.local   # defaults to http://localhost:4317, adjust if needed
-
-npm run dev               # runs server (:4317) and web (:5173) together
+npm run setup      # installs both workspaces, generates server/.env with a real API key,
+                    # and creates web/.env.local — prints the key when it's done
+npm run dev         # runs the API (:4317) and the console (:5173) together
 ```
 
-Open `http://localhost:5173`, paste your `NEMESIS_API_KEY` into the access-control gate, and you're in.
+Open `http://localhost:5173` and paste in the API key the setup script printed.
 
-If you skip setting `NEMESIS_API_KEY`, the server generates a throwaway key each restart and prints it to the console log — fine for a quick look, but set a real one in `.env` for anything persistent.
+Prefer to do it by hand, or need to point the Dev module at a specific repo? See `server/.env.example` and `web/.env.example` — copy each to `.env` / `.env.local` and edit directly; `npm run setup` just automates that same file-copy with a generated key.
+
+If you skip setting `NEMESIS_API_KEY`, the server generates a throwaway key each restart and prints it to the console log — fine for a quick look, but `npm run setup` (or a real key in `.env`) is better for anything persistent.
 
 ### Requirements for full functionality
 
