@@ -1,14 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError, streamJobOutput, type JobMeta } from "../api.js";
+import { speak } from "../voice/speech.js";
 
 export function useJob() {
   const [output, setOutput] = useState("");
   const [status, setStatus] = useState<string | undefined>();
   const stopRef = useRef<(() => void) | null>(null);
+  const labelRef = useRef("Job");
 
   useEffect(() => () => stopRef.current?.(), []);
 
-  async function run(launch: () => Promise<{ job: JobMeta }>) {
+  useEffect(() => {
+    if (!status || status === "running") return;
+    const label = labelRef.current;
+    const phrase =
+      status === "done" ? `${label} complete.` : status === "error" ? `${label} failed.` : `${label} stopped.`;
+    speak(phrase);
+  }, [status]);
+
+  async function run(launch: () => Promise<{ job: JobMeta }>, label = "Job") {
+    labelRef.current = label;
     stopRef.current?.();
     setOutput("");
     setStatus("running");

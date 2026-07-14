@@ -48,6 +48,18 @@ body::before {
   min-height: 100%;
   display: flex;
   flex-direction: column;
+  animation: app-in 0.45s ease;
+}
+
+@keyframes app-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* ---------- Header ---------- */
@@ -170,6 +182,11 @@ body::before {
   border-radius: 10px;
   position: relative;
   overflow: hidden;
+  transition: box-shadow 0.2s ease;
+}
+
+.card:hover {
+  box-shadow: 0 0 26px rgba(0, 242, 209, 0.07);
 }
 
 .card::before {
@@ -419,4 +436,57 @@ button.danger:hover:not(:disabled) {
   color: var(--text-dim);
   padding: 1rem;
   opacity: 0.7;
+}
+
+/* ---------- Voice dock ---------- */
+
+.voice-dock {
+  margin: 1.1rem 1.75rem 0;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(0, 242, 209, 0.05), transparent 60%);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.mic-btn {
+  min-width: 11rem;
+}
+
+.mic-btn.listening {
+  border-color: var(--red);
+  color: var(--red);
+  background: rgba(255, 43, 77, 0.12);
+  box-shadow: 0 0 12px rgba(255, 43, 77, 0.35);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.mic-btn.processing {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.voice-toggle.on {
+  border-color: var(--cyan);
+  background: rgba(0, 242, 209, 0.16);
+  box-shadow: 0 0 8px rgba(0, 242, 209, 0.2);
+}
+
+.voice-transcript {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  flex: 1;
+  min-width: 220px;
+}
+
+.voice-transcript .speaking {
+  color: var(--cyan);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.voice-transcript .idle-hint {
+  opacity: 0.65;
 }

@@ -5,6 +5,7 @@ import { DevPanel } from "./components/DevPanel.js";
 import { Header } from "./components/Header.js";
 import { ReconPanel } from "./components/ReconPanel.js";
 import { SystemPanel } from "./components/SystemPanel.js";
+import { VoiceDock } from "./components/VoiceDock.js";
 
 export function App() {
   const [authed, setAuthed] = useState(false);
@@ -40,6 +41,7 @@ export function App() {
   return (
     <div className="app">
       <Header online={authed} hostname={hostname} />
+      <VoiceDock />
       <div className="grid">
         <div className="column">
           <ReconPanel />
