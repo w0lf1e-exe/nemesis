@@ -1,0 +1,334 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "N.E.M.E.S.I.S API",
+    "version": "0.1.0",
+    "description": "Local offensive-security & dev console backend. Runs on your own machine — see docs/API_REFERENCE.md for auth, CORS, and the async job-streaming pattern every tool endpoint shares."
+  },
+  "servers": [{ "url": "http://localhost:4317" }],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "description": "NEMESIS_API_KEY from server/.env" }
+    },
+    "schemas": {
+      "JobMeta": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "tool": { "type": "string" },
+          "args": { "type": "array", "items": { "type": "string" } },
+          "executor": { "type": "string", "enum": ["local", "kali"] },
+          "status": { "type": "string", "enum": ["running", "done", "error", "killed"] },
+          "exitCode": { "type": ["integer", "null"] },
+          "startedAt": { "type": "integer" },
+          "endedAt": { "type": ["integer", "null"] }
+        }
+      },
+      "JobResponse": {
+        "type": "object",
+        "properties": { "job": { "$ref": "#/components/schemas/JobMeta" } }
+      },
+      "Error": {
+        "type": "object",
+        "properties": { "error": { "type": "string" } },
+        "required": ["error"]
+      },
+      "EngagementScope": {
+        "type": "object",
+        "properties": {
+          "description": { "type": "string" },
+          "confirmedAt": { "type": "integer" },
+          "expiresAt": { "type": "integer" }
+        }
+      }
+    }
+  },
+  "security": [{ "bearerAuth": [] }],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Health check (unauthenticated)",
+        "security": [],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/system/status": {
+      "get": {
+        "summary": "Host telemetry",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/recon/nmap": {
+      "post": {
+        "summary": "Run nmap",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["target"],
+                "properties": {
+                  "target": { "type": "string", "description": "hostname or IP" },
+                  "profile": { "type": "string", "enum": ["ping", "quick", "service", "full", "vuln"], "default": "quick" },
+                  "executor": { "type": "string", "enum": ["local", "kali"], "default": "local" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": { "description": "Job started", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/JobResponse" } } } },
+          "400": { "description": "Validation error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "403": { "description": "Engagement Scope required (profile=vuln only)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/recon/whois": {
+      "post": {
+        "summary": "Run whois",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["target"],
+                "properties": {
+                  "target": { "type": "string" },
+                  "executor": { "type": "string", "enum": ["local", "kali"], "default": "local" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": { "description": "Job started", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/JobResponse" } } } }
+        }
+      }
+    },
+    "/api/recon/dig": {
+      "post": {
+        "summary": "Run dig",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["target"],
+                "properties": {
+                  "target": { "type": "string" },
+                  "recordType": { "type": "string", "enum": ["A", "AAAA", "MX", "TXT", "NS", "CNAME", "SOA", "ANY"], "default": "A" },
+                  "executor": { "type": "string", "enum": ["local", "kali"], "default": "local" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": { "description": "Job started", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/JobResponse" } } } }
+        }
+      }
+    },
+    "/api/recon/subdomains": {
+      "post": {
+        "summary": "Passive subdomain enumeration via crt.sh (synchronous, not a job)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "type": "object", "required": ["target"], "properties": { "target": { "type": "string" } } }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "target": { "type": "string" },
+                    "count": { "type": "integer" },
+                    "subdomains": { "type": "array", "items": { "type": "string" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/dev/git": {
+      "post": {
+        "summary": "Run a git subcommand against the configured dev repo",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["subcommand"],
+                "properties": {
+                  "subcommand": { "type": "string", "enum": ["status", "log", "diff", "branch", "remote", "show-ref"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": { "description": "Job started" }
+        }
+      }
+    },
+    "/api/kali/status": {
+      "get": {
+        "summary": "Kali VM connection config",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/kali/check": {
+      "post": {
+        "summary": "SSH connectivity check + tool inventory",
+        "responses": {
+          "202": { "description": "Job started", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/JobResponse" } } } },
+          "400": { "description": "Kali VM not configured", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/kali-tools": {
+      "get": {
+        "summary": "List the Kali tool registry",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": { "type": "boolean" },
+                    "wordlists": { "type": "array", "items": { "type": "string" } },
+                    "tools": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "label": { "type": "string" },
+                          "tier": { "type": "string", "enum": ["recon", "web", "vuln", "high-risk"] },
+                          "binary": { "type": "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/kali-tools/{id}/run": {
+      "post": {
+        "summary": "Run a registered Kali tool — body shape depends on the tool, see docs/API_REFERENCE.md",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Union of possible fields across all tools — see API_REFERENCE.md for which apply to which tool id",
+                "properties": {
+                  "target": { "type": "string" },
+                  "url": { "type": "string" },
+                  "query": { "type": "string" },
+                  "wordlist": { "type": "string", "enum": ["dirb-common", "dirb-big", "seclists-common", "rockyou"] },
+                  "service": { "type": "string", "enum": ["ssh", "ftp", "http-get", "smb", "rdp"] },
+                  "username": { "type": "string" },
+                  "password": { "type": "string" },
+                  "hashFile": { "type": "string" },
+                  "mode": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": { "description": "Job started", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/JobResponse" } } } },
+          "400": { "description": "Validation error or Kali VM not configured", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "403": { "description": "Engagement Scope required (vuln/high-risk tiers only)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Unknown tool id", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/scope": {
+      "get": {
+        "summary": "Current Engagement Scope, if any",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "scope": { "oneOf": [{ "$ref": "#/components/schemas/EngagementScope" }, { "type": "null" }] } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scope/confirm": {
+      "post": {
+        "summary": "Confirm Engagement Scope, unlocking vuln/high-risk tools",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["description", "confirmText"],
+                "properties": {
+                  "description": { "type": "string", "minLength": 10 },
+                  "confirmText": { "type": "string", "const": "I AM AUTHORIZED" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "scope": { "$ref": "#/components/schemas/EngagementScope" } } } } }
+          },
+          "400": { "description": "Validation error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/scope/clear": {
+      "post": {
+        "summary": "Clear the current Engagement Scope",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/jobs/{id}": {
+      "get": {
+        "summary": "Poll a job's current state",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/JobResponse" } } } },
+          "404": { "description": "Unknown job id", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/jobs/{id}/stream": {
+      "get": {
+        "summary": "Server-Sent Events stream of a job's live output. Auth via ?token= query param (EventSource can't set headers) instead of the Authorization header.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "token", "in": "query", "required": true, "schema": { "type": "string" }, "description": "NEMESIS_API_KEY" }
+        ],
+        "security": [],
+        "responses": { "200": { "description": "text/event-stream" } }
+      }
+    }
+  }
+}

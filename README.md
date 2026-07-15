@@ -85,6 +85,23 @@ The existing nmap/whois/dig routes also gained a **local / Kali VM** toggle in t
 
 Wireless attack tools (`airmon-ng`/`airodump-ng`/`aireplay-ng`/`aircrack-ng`), traffic interception tools (Responder, Bettercap), and Metasploit *exploit execution* (as opposed to module search) aren't exposed as one-click actions here. Unlike everything above, none of these have a single "target" that scopes the action to one consented asset — wireless capture/injection affects every device in radio range, LAN-wide MITM affects every host on the segment, and a generic "run any exploit module" button is a different category of capability than a curated recon/scan toolset. They remain manual work you do directly in the Kali VM, which the SSH connection gives you full access to anyway — NEMESIS just doesn't automate that specific slice.
 
+## Connecting an external frontend
+
+The backend isn't tied to this repo's own console — anything that can send
+an `Authorization: Bearer` header and read Server-Sent Events can drive it,
+including a separately-built frontend like a Lovable project. Full endpoint
+docs: [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md) (human-readable) and
+[`docs/openapi.json`](docs/openapi.json) (machine-readable, e.g. for feeding
+to an AI code generator).
+
+Quick version: set `WEB_ORIGIN` in `server/.env` to a comma-separated list
+including the other frontend's origin (its local dev server, and/or its
+deployed URL if you want that page — opened in your own browser, on the
+machine running this backend — to reach your local server; see
+API_REFERENCE.md for why that's safe and what it doesn't expose), point that
+frontend's API base URL at `http://localhost:4317`, and have it send the same
+bearer key this console uses.
+
 ## Getting started
 
 This is a personal tool meant to run **on your own machine** — its recon module fires real scans from your real network, and its dev module reads your real local git repos. Requires [Node.js](https://nodejs.org) 20+.
@@ -119,7 +136,7 @@ This tool executes real network scans and lookups against whatever target you gi
 Other things worth knowing before you expose this beyond `localhost`:
 
 - The API key is a single shared secret (bearer token) — treat `server/.env` like any other credential.
-- `WEB_ORIGIN`/CORS is locked to one origin; widen it deliberately if you need to.
+- `WEB_ORIGIN`/CORS accepts a comma-separated list; only widen it to origins you actually trust to drive real command execution.
 - Jobs are capped by `JOB_TIMEOUT_MS` (default 5 min) and `JOB_MAX_OUTPUT_BYTES` (default ~2 MB) to bound resource use.
 - There's a lightweight per-IP rate limiter on `/api/*` (20 requests/minute, refilling).
 - If you put this on a network you don't fully trust, put it behind a reverse proxy with TLS — bearer tokens over plain HTTP are only as safe as the network they cross.

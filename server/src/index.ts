@@ -14,9 +14,23 @@ import { systemRouter } from "./routes/system.js";
 const app = express();
 
 app.use(express.json({ limit: "64kb" }));
+
+// Chrome's Private Network Access spec requires this on top of normal CORS
+// before a page loaded from a public origin (e.g. a deployed Lovable site)
+// is allowed to fetch a private/loopback target like this server running on
+// http://localhost. Must run *before* the cors() middleware below: cors()
+// ends OPTIONS preflight requests itself, so a middleware placed after it
+// never runs for preflights.
+app.use((req, res, next) => {
+  if (req.headers["access-control-request-private-network"] === "true") {
+    res.setHeader("Access-Control-Allow-Private-Network", "true");
+  }
+  next();
+});
+
 app.use(
   cors({
-    origin: config.webOrigin,
+    origin: config.webOrigins,
     methods: ["GET", "POST"],
   }),
 );
@@ -44,7 +58,7 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 app.listen(config.port, () => {
   console.log(`\n  N.E.M.E.S.I.S server online — listening on :${config.port}`);
   console.log(`  Dev module bound to: ${config.devRepoPath}`);
-  console.log(`  Allowed web origin:  ${config.webOrigin}`);
+  console.log(`  Allowed web origins: ${config.webOrigins.join(", ")}`);
   console.log(
     config.kali.enabled
       ? `  Kali VM uplink:      ${config.kali.user}@${config.kali.host}:${config.kali.port}\n`

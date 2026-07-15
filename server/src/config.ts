@@ -22,7 +22,13 @@ if (!apiKey || apiKey === "change-me-to-a-long-random-secret") {
 export const config = {
   port: Number(process.env.PORT ?? 4317),
   apiKey: apiKey && apiKey !== "change-me-to-a-long-random-secret" ? apiKey : randomBytes(32).toString("hex"),
-  webOrigin: required("WEB_ORIGIN", "http://localhost:5173"),
+  // Comma-separated so more than one frontend (this project's own console,
+  // a Lovable dev server, a deployed Lovable site calling back to your
+  // local machine) can be allowed at once. See server/.env.example.
+  webOrigins: required("WEB_ORIGIN", "http://localhost:5173")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean),
   devRepoPath: process.env.DEV_REPO_PATH?.trim() || process.cwd(),
   jobTimeoutMs: Number(process.env.JOB_TIMEOUT_MS ?? 300_000),
   jobMaxOutputBytes: Number(process.env.JOB_MAX_OUTPUT_BYTES ?? 2_000_000),
