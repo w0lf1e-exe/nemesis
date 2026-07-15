@@ -1,5 +1,7 @@
 import { config } from "../config.js";
 
+export class ScopeRequiredError extends Error {}
+
 export interface EngagementScope {
   description: string;
   confirmedAt: number;
@@ -31,4 +33,11 @@ export function isScopeActive(): boolean {
 
 export function clearScope(): void {
   active = null;
+}
+
+/** Throws (→ 403, see lib/httpErrors.ts) unless an Engagement Scope is currently confirmed. */
+export function assertScope(action = "this tool"): void {
+  if (!isScopeActive()) {
+    throw new ScopeRequiredError(`Engagement scope not confirmed — confirm scope before running ${action}.`);
+  }
 }

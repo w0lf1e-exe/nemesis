@@ -6,7 +6,7 @@ export type HologramVariant = "core" | "globe" | "node";
 const CYAN = 0x00f2d1;
 const RED = 0xff2b4d;
 
-function buildGeometry(three: typeof THREE, variant: HologramVariant): THREE.BufferGeometry {
+function buildOuterGeometry(three: typeof THREE, variant: HologramVariant): THREE.BufferGeometry {
   switch (variant) {
     case "globe":
       return new three.SphereGeometry(1, 20, 14);
@@ -18,6 +18,16 @@ function buildGeometry(three: typeof THREE, variant: HologramVariant): THREE.Buf
   }
 }
 
+function buildInnerGeometry(three: typeof THREE, variant: HologramVariant): THREE.BufferGeometry {
+  return variant === "node" ? new three.IcosahedronGeometry(0.42, 0) : new three.IcosahedronGeometry(0.5, 0);
+}
+
+interface SceneHandle {
+  three: typeof THREE;
+  outer: THREE.LineSegments;
+  inner: THREE.LineSegments;
+}
+
 /**
  * A small self-contained WebGL hologram: wireframe geometry, additive glow,
  * a counter-rotating inner shell, and a thin particle halo — the "floating
@@ -25,10 +35,17 @@ function buildGeometry(three: typeof THREE, variant: HologramVariant): THREE.Buf
  *
  * three.js is loaded lazily (dynamic import) so the ~600KB engine never
  * blocks the initial console load — it streams in only once a hologram is
- * actually mounted.
+ * actually mounted. The renderer/scene/camera are built exactly once and
+ * kept alive across `variant` changes (only the geometry is swapped) so
+ * switching variants — e.g. idle → scanning → idle as jobs start and stop —
+ * doesn't tear down and rebuild the WebGL context, which was visibly
+ * flickering the hologram on every job transition.
  */
 export function Hologram({ variant = "core", className }: { variant?: HologramVariant; className?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const variantRef = useRef(variant);
+  variantRef.current = variant;
+  const sceneRef = useRef<SceneHandle | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -48,18 +65,18 @@ export function Hologram({ variant = "core", className }: { variant?: HologramVa
       container.appendChild(renderer.domElement);
 
       const outer = new three.LineSegments(
-        new three.WireframeGeometry(buildGeometry(three, variant)),
+        new three.WireframeGeometry(buildOuterGeometry(three, variantRef.current)),
         new three.LineBasicMaterial({ color: CYAN, transparent: true, opacity: 0.85 }),
       );
       scene.add(outer);
 
-      const innerGeom =
-        variant === "node" ? new three.IcosahedronGeometry(0.42, 0) : new three.IcosahedronGeometry(0.5, 0);
       const inner = new three.LineSegments(
-        new three.WireframeGeometry(innerGeom),
+        new three.WireframeGeometry(buildInnerGeometry(three, variantRef.current)),
         new three.LineBasicMaterial({ color: RED, transparent: true, opacity: 0.35 }),
       );
       scene.add(inner);
+
+      sceneRef.current = { three, outer, inner };
 
       // Thin halo of drifting points — the loose "data mote" scatter from the reference HUD.
       const particleCount = 90;
@@ -113,6 +130,7 @@ export function Hologram({ variant = "core", className }: { variant?: HologramVa
       cleanup = () => {
         cancelAnimationFrame(raf);
         resizeObserver.disconnect();
+        sceneRef.current = null;
         renderer.dispose();
         outer.geometry.dispose();
         outer.material.dispose();
@@ -128,6 +146,16 @@ export function Hologram({ variant = "core", className }: { variant?: HologramVa
       cancelled = true;
       cleanup?.();
     };
+  }, []); // mount once — see the swap effect below for variant changes
+
+  useEffect(() => {
+    const handle = sceneRef.current;
+    if (!handle) return; // scene isn't built yet — it'll pick up the latest variant via variantRef when it is
+    const { three, outer, inner } = handle;
+    outer.geometry.dispose();
+    outer.geometry = new three.WireframeGeometry(buildOuterGeometry(three, variant));
+    inner.geometry.dispose();
+    inner.geometry = new three.WireframeGeometry(buildInnerGeometry(three, variant));
   }, [variant]);
 
   return <div ref={containerRef} className={className} style={{ width: "100%", height: "100%" }} />;

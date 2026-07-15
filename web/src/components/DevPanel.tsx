@@ -30,7 +30,10 @@ export function DevPanel() {
     [],
   );
 
+  // Skip the initial mount (status undefined) so a window that's never run
+  // a git action doesn't mask ExternalDisplay's "awaiting uplink" state.
   useEffect(() => {
+    if (!job.status) return;
     broadcastPartial("dev", { label: job.label, output: job.output, status: job.status });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [job.output, job.status, job.label]);

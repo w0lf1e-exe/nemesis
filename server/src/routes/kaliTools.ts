@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { config } from "../config.js";
-import { isScopeActive } from "../lib/engagementScope.js";
+import { assertScope } from "../lib/engagementScope.js";
+import { sendError } from "../lib/httpErrors.js";
 import { startJob } from "../lib/jobs.js";
 import { KALI_TOOL_REGISTRY, WORDLIST_OPTIONS } from "../lib/kaliTools.js";
-import { ValidationError } from "../lib/validate.js";
 
 export const kaliToolsRouter = Router();
 
@@ -25,22 +25,15 @@ kaliToolsRouter.post("/:id/run", (req, res) => {
     res.status(400).json({ error: "Kali VM is not configured — set KALI_SSH_HOST in server/.env" });
     return;
   }
-  if ((spec.tier === "vuln" || spec.tier === "high-risk") && !isScopeActive()) {
-    res.status(403).json({
-      error: "Engagement scope not confirmed — confirm scope before running vuln-scan or credential-audit tools.",
-    });
-    return;
-  }
 
   try {
+    if (spec.tier === "vuln" || spec.tier === "high-risk") {
+      assertScope("vuln-scan or credential-audit tools");
+    }
     const args = spec.build(req.body ?? {});
     const job = startJob(spec.binary, args, { executor: "kali" });
     res.status(202).json({ job });
   } catch (err) {
-    if (err instanceof ValidationError) {
-      res.status(400).json({ error: err.message });
-      return;
-    }
-    res.status(500).json({ error: "internal_error", message: err instanceof Error ? err.message : String(err) });
+    sendError(res, err);
   }
 });

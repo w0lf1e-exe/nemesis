@@ -1,7 +1,8 @@
 import { Router } from "express";
-import { isScopeActive } from "../lib/engagementScope.js";
+import { assertScope } from "../lib/engagementScope.js";
+import { sendError } from "../lib/httpErrors.js";
 import { startJob, type ExecutorKind } from "../lib/jobs.js";
-import { enumValue, ValidationError, validateTarget } from "../lib/validate.js";
+import { enumValue, validateTarget } from "../lib/validate.js";
 
 export const reconRouter = Router();
 
@@ -34,15 +35,12 @@ reconRouter.post("/nmap", (req, res) => {
       res.status(400).json({ error: `unknown profile "${profile}"`, allowed: Object.keys(NMAP_PROFILES) });
       return;
     }
-    if (SCOPE_GATED_PROFILES.has(profile) && !isScopeActive()) {
-      res.status(403).json({ error: "Engagement scope not confirmed — confirm scope before running vuln scans." });
-      return;
-    }
+    if (SCOPE_GATED_PROFILES.has(profile)) assertScope("vuln scans");
     const executor = readExecutor(req.body);
     const job = startJob("nmap", [...flags, target], { executor });
     res.status(202).json({ job });
   } catch (err) {
-    handleError(res, err);
+    sendError(res, err);
   }
 });
 
@@ -53,7 +51,7 @@ reconRouter.post("/whois", (req, res) => {
     const job = startJob("whois", [target], { executor });
     res.status(202).json({ job });
   } catch (err) {
-    handleError(res, err);
+    sendError(res, err);
   }
 });
 
@@ -71,7 +69,7 @@ reconRouter.post("/dig", (req, res) => {
     const job = startJob("dig", [target, recordType, "+noall", "+answer"], { executor });
     res.status(202).json({ job });
   } catch (err) {
-    handleError(res, err);
+    sendError(res, err);
   }
 });
 
@@ -104,14 +102,6 @@ reconRouter.post("/subdomains", async (req, res) => {
       clearTimeout(timeout);
     }
   } catch (err) {
-    handleError(res, err);
+    sendError(res, err);
   }
 });
-
-function handleError(res: import("express").Response, err: unknown): void {
-  if (err instanceof ValidationError) {
-    res.status(400).json({ error: err.message });
-    return;
-  }
-  res.status(500).json({ error: "internal_error", message: err instanceof Error ? err.message : String(err) });
-}

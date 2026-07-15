@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { config } from "../config.js";
+import { sendError } from "../lib/httpErrors.js";
 import { startJob } from "../lib/jobs.js";
-import { ValidationError, validateGitSubcommand } from "../lib/validate.js";
+import { validateGitSubcommand } from "../lib/validate.js";
 
 export const devRouter = Router();
 
@@ -22,10 +23,6 @@ devRouter.post("/git", (req, res) => {
     const job = startJob("git", GIT_ARGS[subcommand], { cwd: config.devRepoPath });
     res.status(202).json({ job, repoPath: config.devRepoPath });
   } catch (err) {
-    if (err instanceof ValidationError) {
-      res.status(400).json({ error: err.message });
-      return;
-    }
-    res.status(500).json({ error: "internal_error", message: err instanceof Error ? err.message : String(err) });
+    sendError(res, err);
   }
 });

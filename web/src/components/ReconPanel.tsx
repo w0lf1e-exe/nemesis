@@ -28,8 +28,12 @@ export function ReconPanel({ kaliEnabled, scopeActive }: { kaliEnabled: boolean;
 
   const canRun = authorized && target.trim().length > 0 && !job.running;
 
-  // Mirror job state to the external-display window, if one is open.
+  // Mirror job state to the external-display window, if one is open. Skip
+  // the initial mount (status is still undefined) so a window that's never
+  // run a job doesn't broadcast a placeholder that masks ExternalDisplay's
+  // "awaiting uplink" state.
   useEffect(() => {
+    if (!job.status) return;
     broadcastPartial("recon", { label: job.label, output: job.output, status: job.status, target });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [job.output, job.status, job.label, target]);
@@ -54,14 +58,24 @@ export function ReconPanel({ kaliEnabled, scopeActive }: { kaliEnabled: boolean;
   }
 
   // Wire voice commands to the same actions the buttons trigger. Scans still
-  // require the authorization checkbox — voice cannot bypass that gate.
+  // require the authorization checkbox — voice cannot bypass that gate —
+  // and can't stack a second job on top of one already running, same as the
+  // buttons being disabled mid-job.
   useEffect(() => {
     const unsubscribers = [
       onCommand("recon.setTarget", ({ target: t }) => setTarget(t)),
       onCommand("recon.nmap", ({ target: t, profile }) => {
         setTarget(t);
+        if (job.running) {
+          speak("Already running a job — one at a time.");
+          return;
+        }
         if (!authorized) {
           speak("Authorization checkbox isn't checked. Confirm authorization before I can scan.");
+          return;
+        }
+        if (profile === "vuln" && !scopeActive) {
+          speak("Engagement scope isn't confirmed. Confirm scope before I can run a vuln scan.");
           return;
         }
         const label = NMAP_PROFILES.find((p) => p.id === profile)?.label ?? profile;
@@ -70,6 +84,10 @@ export function ReconPanel({ kaliEnabled, scopeActive }: { kaliEnabled: boolean;
       }),
       onCommand("recon.whois", ({ target: t }) => {
         setTarget(t);
+        if (job.running) {
+          speak("Already running a job — one at a time.");
+          return;
+        }
         if (!authorized) {
           speak("Authorization checkbox isn't checked. Confirm authorization before I can run that.");
           return;
@@ -80,6 +98,10 @@ export function ReconPanel({ kaliEnabled, scopeActive }: { kaliEnabled: boolean;
       onCommand("recon.dig", ({ target: t, recordType: rt }) => {
         setTarget(t);
         setRecordType(rt);
+        if (job.running) {
+          speak("Already running a job — one at a time.");
+          return;
+        }
         if (!authorized) {
           speak("Authorization checkbox isn't checked. Confirm authorization before I can run that.");
           return;
@@ -99,7 +121,7 @@ export function ReconPanel({ kaliEnabled, scopeActive }: { kaliEnabled: boolean;
     ];
     return () => unsubscribers.forEach((off) => off());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authorized, executor]);
+  }, [authorized, executor, scopeActive, job.running]);
 
   return (
     <ModuleCard title="Recon Module" tag="OFFENSIVE">

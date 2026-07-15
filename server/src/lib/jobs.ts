@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import type { Response } from "express";
 import { config } from "../config.js";
+import { KALI_TOOL_BINARIES } from "./kaliTools.js";
 import { buildSshInvocation } from "./ssh.js";
 
 export type JobStatus = "running" | "done" | "error" | "killed";
@@ -31,29 +32,12 @@ const jobs = new Map<string, Job>();
 // strings from this whitelist — never a user-supplied binary name.
 const ALLOWED_TOOLS = new Set(["nmap", "whois", "dig", "git"]);
 
-// Binaries that may be invoked on the connected Kali VM over SSH. "bash" is
-// included only for the fixed, developer-authored inventory-check script —
-// never for anything built from request input.
-export const ALLOWED_KALI_TOOLS = new Set([
-  "nmap",
-  "whois",
-  "dig",
-  "theHarvester",
-  "amass",
-  "dnsrecon",
-  "sublist3r",
-  "nikto",
-  "gobuster",
-  "whatweb",
-  "wpscan",
-  "sqlmap",
-  "searchsploit",
-  "msfconsole",
-  "hydra",
-  "john",
-  "hashcat",
-  "bash",
-]);
+// Binaries that may be invoked on the connected Kali VM over SSH. Derived
+// from the tool registry (the single source of truth for what's runnable)
+// plus a few extras: nmap/whois/dig also support the Kali executor via the
+// local recon routes, and "bash" is for the fixed, developer-authored
+// inventory-check script only — never for anything built from request input.
+export const ALLOWED_KALI_TOOLS = new Set([...KALI_TOOL_BINARIES, "nmap", "whois", "dig", "bash"]);
 
 export function startJob(
   tool: string,
@@ -64,6 +48,26 @@ export function startJob(
   const whitelist = executor === "kali" ? ALLOWED_KALI_TOOLS : ALLOWED_TOOLS;
   if (!whitelist.has(tool)) {
     throw new Error(`tool "${tool}" is not in the ${executor} execution whitelist`);
+  }
+
+  // Resolve what actually gets spawned *before* registering the job — for
+  // the Kali executor this can throw (e.g. KALI_SSH_KEY_PATH not set), and
+  // doing that after jobs.set() would leave a zombie "running" entry behind
+  // with no process and no way to ever complete it.
+  //
+  // Local: spawn() with an argument array never invokes a shell, so nothing
+  // in `args` can be interpreted as shell syntax. Kali: the logical tool and
+  // args get shell-quoted into one SSH command line (see lib/ssh.ts) — the
+  // locally-spawned process is always the fixed "ssh" binary either way.
+  let spawnCommand: string;
+  let spawnArgs: string[];
+  if (executor === "kali") {
+    const invocation = buildSshInvocation(tool, args);
+    spawnCommand = invocation.command;
+    spawnArgs = invocation.args;
+  } else {
+    spawnCommand = tool;
+    spawnArgs = args;
   }
 
   const id = randomUUID();
@@ -82,18 +86,6 @@ export function startJob(
     truncated: false,
   };
   jobs.set(id, job);
-
-  // Local: spawn() with an argument array never invokes a shell, so nothing
-  // in `args` can be interpreted as shell syntax. Kali: the logical tool and
-  // args get shell-quoted into one SSH command line (see lib/ssh.ts) — the
-  // locally-spawned process is always the fixed "ssh" binary either way.
-  const [spawnCommand, spawnArgs] =
-    executor === "kali"
-      ? (() => {
-          const invocation = buildSshInvocation(tool, args);
-          return [invocation.command, invocation.args] as const;
-        })()
-      : ([tool, args] as const);
 
   const child = spawn(spawnCommand, spawnArgs, {
     shell: false,

@@ -12,10 +12,15 @@ export function KaliToolsPanel({ scopeActive }: { scopeActive: boolean }) {
   const [wordlists, setWordlists] = useState<string[]>([]);
   const job = useJob();
 
+  const [authorized, setAuthorized] = useState(false);
   const [target, setTarget] = useState("");
   const [url, setUrl] = useState("");
   const [query, setQuery] = useState("");
-  const [wordlist, setWordlist] = useState("");
+  // Separate state per consumer — gobuster and john/hashcat pick wordlists
+  // independently; sharing one selector meant choosing a cracking wordlist
+  // silently changed what the next directory brute-force would use.
+  const [dirWordlist, setDirWordlist] = useState("");
+  const [crackWordlist, setCrackWordlist] = useState("");
   const [service, setService] = useState(HYDRA_SERVICES[0]);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -29,7 +34,10 @@ export function KaliToolsPanel({ scopeActive }: { scopeActive: boolean }) {
         setEnabled(res.enabled);
         setTools(res.tools);
         setWordlists(res.wordlists);
-        if (res.wordlists.length) setWordlist(res.wordlists[0]);
+        if (res.wordlists.length) {
+          setDirWordlist(res.wordlists[0]);
+          setCrackWordlist(res.wordlists[0]);
+        }
       })
       .catch(() => setEnabled(false));
   }, []);
@@ -59,14 +67,27 @@ export function KaliToolsPanel({ scopeActive }: { scopeActive: boolean }) {
   const john = byId("john");
   const hashcat = byId("hashcat");
 
+  const canRunTarget = authorized && !job.running && target.trim().length > 0;
+  const canRunUrl = authorized && !job.running && url.trim().length > 0;
+  const canRunQuery = authorized && !job.running && query.trim().length > 0;
+  const canRunGated = canRunTarget && scopeActive; // vuln/high-risk tools additionally need engagement scope
+
   return (
     <ModuleCard title="Kali Toolset" tag="SSH">
+      <label className="authorize">
+        <input type="checkbox" checked={authorized} onChange={(e) => setAuthorized(e.target.checked)} />
+        <span>
+          I confirm I am authorized to test against these targets (own asset, signed engagement, or CTF scope) — same
+          gate as the local Recon Module.
+        </span>
+      </label>
+
       <div className="row">
         <input type="text" placeholder="target hostname or IP…" value={target} onChange={(e) => setTarget(e.target.value)} />
       </div>
       <div className="row">
         {reconTools.map((t) => (
-          <button key={t.id} disabled={job.running || !target.trim()} onClick={() => run(t.id, t.label, { target: target.trim() })}>
+          <button key={t.id} disabled={!canRunTarget} onClick={() => run(t.id, t.label, { target: target.trim() })}>
             {t.label}
           </button>
         ))}
@@ -74,10 +95,10 @@ export function KaliToolsPanel({ scopeActive }: { scopeActive: boolean }) {
 
       <div className="row">
         <input type="text" placeholder="searchsploit / msf module search query…" value={query} onChange={(e) => setQuery(e.target.value)} />
-        <button disabled={job.running || !query.trim()} onClick={() => run("searchsploit", "searchsploit", { query: query.trim() })}>
+        <button disabled={!canRunQuery} onClick={() => run("searchsploit", "searchsploit", { query: query.trim() })}>
           searchsploit
         </button>
-        <button disabled={job.running || !query.trim()} onClick={() => run("msfsearch", "Metasploit module search", { query: query.trim() })}>
+        <button disabled={!canRunQuery} onClick={() => run("msfsearch", "Metasploit module search", { query: query.trim() })}>
           msf module search
         </button>
       </div>
@@ -87,23 +108,20 @@ export function KaliToolsPanel({ scopeActive }: { scopeActive: boolean }) {
       </div>
       <div className="row">
         {webTools.map((t) => (
-          <button key={t.id} disabled={job.running || !url.trim()} onClick={() => run(t.id, t.label, { url: url.trim() })}>
+          <button key={t.id} disabled={!canRunUrl} onClick={() => run(t.id, t.label, { url: url.trim() })}>
             {t.label}
           </button>
         ))}
         {gobuster && (
           <>
-            <select value={wordlist} onChange={(e) => setWordlist(e.target.value)}>
+            <select value={dirWordlist} onChange={(e) => setDirWordlist(e.target.value)}>
               {wordlists.map((w) => (
                 <option key={w} value={w}>
                   {w}
                 </option>
               ))}
             </select>
-            <button
-              disabled={job.running || !url.trim()}
-              onClick={() => run("gobuster", "gobuster dir", { url: url.trim(), wordlist })}
-            >
+            <button disabled={!canRunUrl} onClick={() => run("gobuster", "gobuster dir", { url: url.trim(), wordlist: dirWordlist })}>
               gobuster dir
             </button>
           </>
@@ -113,7 +131,7 @@ export function KaliToolsPanel({ scopeActive }: { scopeActive: boolean }) {
       {sqlmap && (
         <div className="row">
           <button
-            disabled={job.running || !url.trim() || !scopeActive}
+            disabled={!canRunUrl || !scopeActive}
             title={scopeActive ? undefined : "Confirm Engagement Scope first"}
             onClick={() => run("sqlmap", "sqlmap (detect only)", { url: url.trim() })}
           >
@@ -143,7 +161,7 @@ export function KaliToolsPanel({ scopeActive }: { scopeActive: boolean }) {
               <input type="text" placeholder="username" value={username} onChange={(e) => setUsername(e.target.value)} style={{ minWidth: 100 }} />
               <input type="text" placeholder="password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ minWidth: 100 }} />
               <button
-                disabled={job.running || !target.trim() || !username.trim() || !password.trim() || !scopeActive}
+                disabled={!canRunGated || !username.trim() || !password.trim()}
                 title={scopeActive ? undefined : "Confirm Engagement Scope first"}
                 onClick={() =>
                   run("hydra", "Hydra credential test", { service, target: target.trim(), username: username.trim(), password: password.trim() })
@@ -162,7 +180,7 @@ export function KaliToolsPanel({ scopeActive }: { scopeActive: boolean }) {
                 value={hashFile}
                 onChange={(e) => setHashFile(e.target.value)}
               />
-              <select value={wordlist} onChange={(e) => setWordlist(e.target.value)}>
+              <select value={crackWordlist} onChange={(e) => setCrackWordlist(e.target.value)}>
                 {wordlists.map((w) => (
                   <option key={w} value={w}>
                     {w}
@@ -171,9 +189,9 @@ export function KaliToolsPanel({ scopeActive }: { scopeActive: boolean }) {
               </select>
               {john && (
                 <button
-                  disabled={job.running || !hashFile.trim() || !scopeActive}
+                  disabled={!authorized || !scopeActive || job.running || !hashFile.trim()}
                   title={scopeActive ? undefined : "Confirm Engagement Scope first"}
-                  onClick={() => run("john", "John the Ripper", { hashFile: hashFile.trim(), wordlist })}
+                  onClick={() => run("john", "John the Ripper", { hashFile: hashFile.trim(), wordlist: crackWordlist })}
                 >
                   john {scopeActive ? "" : "🔒"}
                 </button>
@@ -188,9 +206,9 @@ export function KaliToolsPanel({ scopeActive }: { scopeActive: boolean }) {
                     style={{ minWidth: 90, flex: "none" }}
                   />
                   <button
-                    disabled={job.running || !hashFile.trim() || !scopeActive}
+                    disabled={!authorized || !scopeActive || job.running || !hashFile.trim()}
                     title={scopeActive ? undefined : "Confirm Engagement Scope first"}
-                    onClick={() => run("hashcat", "hashcat", { hashFile: hashFile.trim(), wordlist, mode: hashMode.trim() })}
+                    onClick={() => run("hashcat", "hashcat", { hashFile: hashFile.trim(), wordlist: crackWordlist, mode: hashMode.trim() })}
                   >
                     hashcat {scopeActive ? "" : "🔒"}
                   </button>

@@ -1,4 +1,5 @@
 import { config } from "../config.js";
+import { ValidationError } from "./validate.js";
 
 /**
  * POSIX single-quote wrapping. Unlike local spawn() (argv array, no shell
@@ -18,10 +19,10 @@ export interface SshInvocation {
 /** Builds a local `ssh ...` invocation (spawned via execFile-style argv, never a shell) that runs one remote command. */
 export function buildSshInvocation(remoteBin: string, remoteArgs: string[]): SshInvocation {
   if (!config.kali.enabled) {
-    throw new Error("Kali VM is not configured — set KALI_SSH_HOST in server/.env");
+    throw new ValidationError("Kali VM is not configured — set KALI_SSH_HOST in server/.env");
   }
   if (!config.kali.keyPath) {
-    throw new Error("Kali VM has no KALI_SSH_KEY_PATH configured — password auth is not supported");
+    throw new ValidationError("Kali VM has no KALI_SSH_KEY_PATH configured — password auth is not supported");
   }
 
   const remoteCommand = [remoteBin, ...remoteArgs].map(shellQuote).join(" ");

@@ -11,8 +11,7 @@ import { ParticleField } from "./components/ParticleField.js";
 import { ReconPanel } from "./components/ReconPanel.js";
 import { SystemPanel } from "./components/SystemPanel.js";
 import { VoiceDock } from "./components/VoiceDock.js";
-import { subscribeSync, type JobSyncState } from "./sync/bus.js";
-import type { HologramVariant } from "./three/Hologram.js";
+import { deriveActivity, subscribeSync, type JobSyncState } from "./sync/bus.js";
 
 export function App() {
   const [authed, setAuthed] = useState(false);
@@ -67,14 +66,7 @@ export function App() {
     );
   }
 
-  const statusLine =
-    recon?.status === "running"
-      ? `SCANNING ${recon.target ?? ""}`.trim()
-      : dev?.status === "running"
-        ? "GIT ACTIVE"
-        : "STANDBY";
-  const hologramVariant: HologramVariant =
-    recon?.status === "running" ? "globe" : dev?.status === "running" ? "node" : "core";
+  const { statusLine, variant: hologramVariant } = deriveActivity(recon, dev);
 
   return (
     <div className="app">

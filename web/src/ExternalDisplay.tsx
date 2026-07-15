@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { HudCore } from "./components/HudCore.js";
 import { ParticleField } from "./components/ParticleField.js";
 import { Terminal } from "./components/Terminal.js";
-import { subscribeSync, type JobSyncState, type SystemSyncState, type VoiceSyncState } from "./sync/bus.js";
+import { deriveActivity, subscribeSync, type JobSyncState, type SystemSyncState, type VoiceSyncState } from "./sync/bus.js";
 
 function fmtBytes(bytes: number): string {
   return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
@@ -39,7 +39,7 @@ export function ExternalDisplay() {
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
 
-  const statusLine = recon?.status === "running" ? "SCANNING" : dev?.status === "running" ? "GIT ACTIVE" : "STANDBY";
+  const { statusLine, variant: hologramVariant } = deriveActivity(recon, dev);
   const hasFeed = Boolean(recon || dev);
 
   return (
@@ -83,7 +83,7 @@ export function ExternalDisplay() {
           </div>
 
           <div className="external-hud">
-            <HudCore variant={recon?.status === "running" ? "globe" : "core"} statusLine={statusLine} online={online} />
+            <HudCore variant={hologramVariant} statusLine={statusLine} online={online} />
           </div>
 
           <div className="external-feed">

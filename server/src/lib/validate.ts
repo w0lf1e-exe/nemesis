@@ -77,10 +77,14 @@ export function enumValue(raw: unknown, allowed: readonly string[], label = "val
  * search). Strips shell/console metacharacters as defense in depth — for
  * the Metasploit case specifically this also blocks ";" from breaking out
  * of the fixed `search <query>; exit` resource script into arbitrary
- * console commands.
+ * console commands. Also rejects a leading "-": searchsploit's build()
+ * passes this as the tool's sole argv element, so an unblocked leading
+ * dash would be interpreted as a CLI flag rather than a search term.
  */
 export function searchQuery(raw: unknown): string {
-  return shortText(raw, "query", 200).replace(/[;&|`$()<>]/g, "");
+  const value = shortText(raw, "query", 200).replace(/[;&|`$()<>]/g, "");
+  if (value.startsWith("-")) throw new ValidationError("query cannot look like a flag");
+  return value;
 }
 
 /** A numeric hashcat mode id (e.g. 0 = MD5, 1000 = NTLM) — digits only. */
@@ -89,4 +93,20 @@ export function modeNumber(raw: unknown): string {
     throw new ValidationError("mode must be a numeric hashcat mode id");
   }
   return raw.trim();
+}
+
+/**
+ * A single path segment — letters, digits, '.', '_', '-' only, and never
+ * exactly "." or ".." — safe to join onto a fixed base directory with no
+ * traversal outside it (no "/" is ever accepted, so ".." is the only
+ * possible escape and it's blocked explicitly).
+ */
+export function safeFilename(raw: unknown, label = "filename"): string {
+  if (typeof raw !== "string" || !/^[a-zA-Z0-9._-]{1,128}$/.test(raw)) {
+    throw new ValidationError(`${label} must contain only letters, numbers, '.', '_', '-' (no path separators)`);
+  }
+  if (raw === "." || raw === "..") {
+    throw new ValidationError(`${label} cannot be "." or ".."`);
+  }
+  return raw;
 }

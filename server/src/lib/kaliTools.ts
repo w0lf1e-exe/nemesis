@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { enumValue, modeNumber, searchQuery, shortText, validateTarget, validateUrl, ValidationError } from "./validate.js";
+import { enumValue, modeNumber, safeFilename, searchQuery, shortText, validateTarget, validateUrl, ValidationError } from "./validate.js";
 
 export type RiskTier = "recon" | "web" | "vuln" | "high-risk";
 
@@ -31,10 +31,7 @@ function wordlistPath(key: unknown): string {
 // sitting in the configured KALI_WORK_DIR — referenced by filename only, so
 // there's no path traversal outside that one directory.
 function workspaceFile(name: unknown): string {
-  if (typeof name !== "string" || !/^[a-zA-Z0-9._-]{1,128}$/.test(name)) {
-    throw new ValidationError("filename must contain only letters, numbers, '.', '_', '-' (no path separators)");
-  }
-  return `${config.kali.workDir}/${name}`;
+  return `${config.kali.workDir}/${safeFilename(name, "hash filename")}`;
 }
 
 export const WORDLIST_OPTIONS = Object.keys(WORDLISTS);
@@ -150,3 +147,6 @@ export const KALI_TOOL_REGISTRY: Record<string, KaliToolSpec> = {
     build: (b) => ["-m", modeNumber(b.mode), "-a", "0", workspaceFile(b.hashFile), wordlistPath(b.wordlist)],
   },
 };
+
+/** Every binary the registry can launch — the single source of truth the Kali executor whitelist is built from. */
+export const KALI_TOOL_BINARIES = new Set(Object.values(KALI_TOOL_REGISTRY).map((t) => t.binary));

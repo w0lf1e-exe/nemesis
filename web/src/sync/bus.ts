@@ -3,6 +3,8 @@
 // reachable over the network, so the external display can safely be a
 // receive-only surface with no auth of its own.
 
+import type { HologramVariant } from "../three/Hologram.js";
+
 export interface JobSyncState {
   label: string;
   output: string;
@@ -46,4 +48,22 @@ export function subscribeSync<K extends SyncKey>(cb: (key: K, value: SyncSnapsho
   const listener = (e: MessageEvent) => cb(e.data.key, e.data.value);
   channel.addEventListener("message", listener);
   return () => channel.removeEventListener("message", listener);
+}
+
+/**
+ * What the HUD core should show given the latest recon/dev job state —
+ * shared by App.tsx (the primary hologram) and ExternalDisplay.tsx (the
+ * mirror), so the two windows can't disagree about what's currently active.
+ */
+export function deriveActivity(
+  recon: JobSyncState | undefined,
+  dev: JobSyncState | undefined,
+): { statusLine: string; variant: HologramVariant } {
+  if (recon?.status === "running") {
+    return { statusLine: `SCANNING ${recon.target ?? ""}`.trim(), variant: "globe" };
+  }
+  if (dev?.status === "running") {
+    return { statusLine: "GIT ACTIVE", variant: "node" };
+  }
+  return { statusLine: "STANDBY", variant: "core" };
 }
