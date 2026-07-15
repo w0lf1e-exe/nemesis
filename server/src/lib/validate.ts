@@ -36,3 +36,57 @@ export function validateGitSubcommand(raw: unknown): string {
   }
   return raw;
 }
+
+/** A plain http(s) URL with no embedded credentials and a validated hostname. */
+export function validateUrl(raw: unknown): string {
+  if (typeof raw !== "string") throw new ValidationError("url must be a string");
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    throw new ValidationError("url is not a valid URL");
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new ValidationError("url must be http or https");
+  }
+  if (url.username || url.password) {
+    throw new ValidationError("url must not include embedded credentials");
+  }
+  validateTarget(url.hostname);
+  return url.toString();
+}
+
+/** Short single-line free text (usernames, passwords, search queries) — bounded length, no control characters. */
+export function shortText(raw: unknown, label: string, maxLen = 128): string {
+  if (typeof raw !== "string" || !raw.trim()) throw new ValidationError(`${label} is required`);
+  const value = raw.trim();
+  if (value.length > maxLen) throw new ValidationError(`${label} is too long (max ${maxLen} characters)`);
+  if (/[\r\n\0]/.test(value)) throw new ValidationError(`${label} contains invalid characters`);
+  return value;
+}
+
+export function enumValue(raw: unknown, allowed: readonly string[], label = "value"): string {
+  if (typeof raw !== "string" || !allowed.includes(raw)) {
+    throw new ValidationError(`${label} must be one of: ${allowed.join(", ")}`);
+  }
+  return raw;
+}
+
+/**
+ * A search-engine-style query (searchsploit titles, Metasploit module
+ * search). Strips shell/console metacharacters as defense in depth — for
+ * the Metasploit case specifically this also blocks ";" from breaking out
+ * of the fixed `search <query>; exit` resource script into arbitrary
+ * console commands.
+ */
+export function searchQuery(raw: unknown): string {
+  return shortText(raw, "query", 200).replace(/[;&|`$()<>]/g, "");
+}
+
+/** A numeric hashcat mode id (e.g. 0 = MD5, 1000 = NTLM) — digits only. */
+export function modeNumber(raw: unknown): string {
+  if (typeof raw !== "string" || !/^\d{1,5}$/.test(raw.trim())) {
+    throw new ValidationError("mode must be a numeric hashcat mode id");
+  }
+  return raw.trim();
+}

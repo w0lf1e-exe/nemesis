@@ -2,8 +2,11 @@ import { useEffect, useState } from "react";
 import { api, getApiKey } from "./api.js";
 import { AuthGate } from "./components/AuthGate.js";
 import { DevPanel } from "./components/DevPanel.js";
+import { EngagementScopeGate } from "./components/EngagementScopeGate.js";
 import { Header } from "./components/Header.js";
 import { HudCore } from "./components/HudCore.js";
+import { KaliPanel } from "./components/KaliPanel.js";
+import { KaliToolsPanel } from "./components/KaliToolsPanel.js";
 import { ParticleField } from "./components/ParticleField.js";
 import { ReconPanel } from "./components/ReconPanel.js";
 import { SystemPanel } from "./components/SystemPanel.js";
@@ -17,6 +20,8 @@ export function App() {
   const [hostname, setHostname] = useState<string>();
   const [recon, setRecon] = useState<JobSyncState>();
   const [dev, setDev] = useState<JobSyncState>();
+  const [kaliEnabled, setKaliEnabled] = useState(false);
+  const [scopeActive, setScopeActive] = useState(false);
 
   useEffect(() => {
     async function bootstrap() {
@@ -32,6 +37,14 @@ export function App() {
     }
     bootstrap();
   }, []);
+
+  useEffect(() => {
+    if (!authed) return;
+    api
+      .kaliStatus()
+      .then((s) => setKaliEnabled(s.enabled))
+      .catch(() => setKaliEnabled(false));
+  }, [authed]);
 
   useEffect(
     () =>
@@ -73,11 +86,14 @@ export function App() {
       <VoiceDock />
       <div className="grid">
         <div className="column">
-          <ReconPanel />
+          <ReconPanel kaliEnabled={kaliEnabled} scopeActive={scopeActive} />
+          <KaliToolsPanel scopeActive={scopeActive} />
         </div>
         <div className="column">
           <DevPanel />
           <SystemPanel onStatus={(s) => setHostname(s.hostname)} />
+          <KaliPanel />
+          <EngagementScopeGate onChange={setScopeActive} />
         </div>
       </div>
       <div className="footer-note">

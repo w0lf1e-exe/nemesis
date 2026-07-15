@@ -1,6 +1,7 @@
 import { Router } from "express";
-import { startJob } from "../lib/jobs.js";
-import { ValidationError, validateTarget } from "../lib/validate.js";
+import { isScopeActive } from "../lib/engagementScope.js";
+import { startJob, type ExecutorKind } from "../lib/jobs.js";
+import { enumValue, ValidationError, validateTarget } from "../lib/validate.js";
 
 export const reconRouter = Router();
 
@@ -11,7 +12,18 @@ const NMAP_PROFILES: Record<string, string[]> = {
   quick: ["-T4", "-F"],
   service: ["-T4", "-sV", "-F"],
   full: ["-T4", "-p-"],
+  vuln: ["-T4", "-sV", "--script", "vuln"],
 };
+
+// NSE vuln scripts actively probe for exploitable conditions, not just open
+// ports/versions — hold it to the same engagement-scope bar as sqlmap.
+const SCOPE_GATED_PROFILES = new Set(["vuln"]);
+
+function readExecutor(body: unknown): ExecutorKind {
+  const raw = (body as Record<string, unknown> | undefined)?.executor;
+  if (raw === undefined) return "local";
+  return enumValue(raw, ["local", "kali"], "executor") as ExecutorKind;
+}
 
 reconRouter.post("/nmap", (req, res) => {
   try {
@@ -22,7 +34,12 @@ reconRouter.post("/nmap", (req, res) => {
       res.status(400).json({ error: `unknown profile "${profile}"`, allowed: Object.keys(NMAP_PROFILES) });
       return;
     }
-    const job = startJob("nmap", [...flags, target]);
+    if (SCOPE_GATED_PROFILES.has(profile) && !isScopeActive()) {
+      res.status(403).json({ error: "Engagement scope not confirmed — confirm scope before running vuln scans." });
+      return;
+    }
+    const executor = readExecutor(req.body);
+    const job = startJob("nmap", [...flags, target], { executor });
     res.status(202).json({ job });
   } catch (err) {
     handleError(res, err);
@@ -32,7 +49,8 @@ reconRouter.post("/nmap", (req, res) => {
 reconRouter.post("/whois", (req, res) => {
   try {
     const target = validateTarget(req.body?.target);
-    const job = startJob("whois", [target]);
+    const executor = readExecutor(req.body);
+    const job = startJob("whois", [target], { executor });
     res.status(202).json({ job });
   } catch (err) {
     handleError(res, err);
@@ -49,7 +67,8 @@ reconRouter.post("/dig", (req, res) => {
       res.status(400).json({ error: `unknown record type "${recordType}"`, allowed: [...DIG_RECORD_TYPES] });
       return;
     }
-    const job = startJob("dig", [target, recordType, "+noall", "+answer"]);
+    const executor = readExecutor(req.body);
+    const job = startJob("dig", [target, recordType, "+noall", "+answer"], { executor });
     res.status(202).json({ job });
   } catch (err) {
     handleError(res, err);

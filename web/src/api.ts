@@ -13,14 +13,38 @@ export function clearApiKey(): void {
   localStorage.removeItem(KEY_STORAGE);
 }
 
+export type Executor = "local" | "kali";
+
 export interface JobMeta {
   id: string;
   tool: string;
   args: string[];
+  executor: Executor;
   status: "running" | "done" | "error" | "killed";
   exitCode: number | null;
   startedAt: number;
   endedAt: number | null;
+}
+
+export interface EngagementScope {
+  description: string;
+  confirmedAt: number;
+  expiresAt: number;
+}
+
+export interface KaliStatus {
+  enabled: boolean;
+  host: string | null;
+  port: number;
+  user: string;
+  workDir: string;
+}
+
+export interface KaliToolInfo {
+  id: string;
+  label: string;
+  tier: "recon" | "web" | "vuln" | "high-risk";
+  binary: string;
 }
 
 export class ApiError extends Error {
@@ -51,12 +75,18 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 export const api = {
   health: () => fetch(`${BASE_URL}/api/health`).then((r) => r.json()),
   systemStatus: () => request<Record<string, unknown>>("/api/system/status"),
-  nmap: (target: string, profile: string) =>
-    request<{ job: JobMeta }>("/api/recon/nmap", { method: "POST", body: JSON.stringify({ target, profile }) }),
-  whois: (target: string) =>
-    request<{ job: JobMeta }>("/api/recon/whois", { method: "POST", body: JSON.stringify({ target }) }),
-  dig: (target: string, recordType: string) =>
-    request<{ job: JobMeta }>("/api/recon/dig", { method: "POST", body: JSON.stringify({ target, recordType }) }),
+  nmap: (target: string, profile: string, executor: Executor = "local") =>
+    request<{ job: JobMeta }>("/api/recon/nmap", {
+      method: "POST",
+      body: JSON.stringify({ target, profile, executor }),
+    }),
+  whois: (target: string, executor: Executor = "local") =>
+    request<{ job: JobMeta }>("/api/recon/whois", { method: "POST", body: JSON.stringify({ target, executor }) }),
+  dig: (target: string, recordType: string, executor: Executor = "local") =>
+    request<{ job: JobMeta }>("/api/recon/dig", {
+      method: "POST",
+      body: JSON.stringify({ target, recordType, executor }),
+    }),
   subdomains: (target: string) =>
     request<{ target: string; count: number; subdomains: string[] }>("/api/recon/subdomains", {
       method: "POST",
@@ -67,6 +97,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ subcommand }),
     }),
+
+  kaliStatus: () => request<KaliStatus>("/api/kali/status"),
+  kaliCheck: () => request<{ job: JobMeta }>("/api/kali/check", { method: "POST" }),
+  kaliTools: () => request<{ enabled: boolean; wordlists: string[]; tools: KaliToolInfo[] }>("/api/kali-tools"),
+  runKaliTool: (id: string, body: Record<string, string>) =>
+    request<{ job: JobMeta }>(`/api/kali-tools/${id}/run`, { method: "POST", body: JSON.stringify(body) }),
+
+  getScope: () => request<{ scope: EngagementScope | null }>("/api/scope"),
+  confirmScope: (description: string, confirmText: string) =>
+    request<{ scope: EngagementScope }>("/api/scope/confirm", {
+      method: "POST",
+      body: JSON.stringify({ description, confirmText }),
+    }),
+  clearScope: () => request<{ ok: true }>("/api/scope/clear", { method: "POST" }),
 };
 
 /** Streams a running job's output; EventSource can't send headers so the key rides as a query param. */

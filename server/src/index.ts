@@ -5,7 +5,10 @@ import { requireAuth } from "./middleware/auth.js";
 import { rateLimit } from "./middleware/rateLimit.js";
 import { devRouter } from "./routes/dev.js";
 import { jobsRouter } from "./routes/jobs.js";
+import { kaliRouter } from "./routes/kali.js";
+import { kaliToolsRouter } from "./routes/kaliTools.js";
 import { reconRouter } from "./routes/recon.js";
+import { scopeRouter } from "./routes/scope.js";
 import { systemRouter } from "./routes/system.js";
 
 const app = express();
@@ -26,6 +29,9 @@ app.use("/api/recon", reconRouter);
 app.use("/api/dev", devRouter);
 app.use("/api/system", systemRouter);
 app.use("/api/jobs", jobsRouter);
+app.use("/api/kali", kaliRouter);
+app.use("/api/kali-tools", kaliToolsRouter);
+app.use("/api/scope", scopeRouter);
 
 app.use((_req, res) => res.status(404).json({ error: "not_found" }));
 
@@ -38,5 +44,10 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 app.listen(config.port, () => {
   console.log(`\n  N.E.M.E.S.I.S server online — listening on :${config.port}`);
   console.log(`  Dev module bound to: ${config.devRepoPath}`);
-  console.log(`  Allowed web origin:  ${config.webOrigin}\n`);
+  console.log(`  Allowed web origin:  ${config.webOrigin}`);
+  console.log(
+    config.kali.enabled
+      ? `  Kali VM uplink:      ${config.kali.user}@${config.kali.host}:${config.kali.port}\n`
+      : `  Kali VM uplink:      not configured (set KALI_SSH_HOST to enable)\n`,
+  );
 });

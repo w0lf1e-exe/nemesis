@@ -3,13 +3,16 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import type { Response } from "express";
 import { config } from "../config.js";
+import { buildSshInvocation } from "./ssh.js";
 
 export type JobStatus = "running" | "done" | "error" | "killed";
+export type ExecutorKind = "local" | "kali";
 
 export interface JobMeta {
   id: string;
   tool: string;
   args: string[];
+  executor: ExecutorKind;
   status: JobStatus;
   exitCode: number | null;
   startedAt: number;
@@ -24,13 +27,43 @@ interface Job extends JobMeta {
 
 const jobs = new Map<string, Job>();
 
-// Only these binaries may ever be spawned. Callers pass fixed strings from
-// this whitelist — never a user-supplied binary name.
+// Only these binaries may ever be spawned locally. Callers pass fixed
+// strings from this whitelist — never a user-supplied binary name.
 const ALLOWED_TOOLS = new Set(["nmap", "whois", "dig", "git"]);
 
-export function startJob(tool: string, args: string[], opts: { cwd?: string } = {}): JobMeta {
-  if (!ALLOWED_TOOLS.has(tool)) {
-    throw new Error(`tool "${tool}" is not in the execution whitelist`);
+// Binaries that may be invoked on the connected Kali VM over SSH. "bash" is
+// included only for the fixed, developer-authored inventory-check script —
+// never for anything built from request input.
+export const ALLOWED_KALI_TOOLS = new Set([
+  "nmap",
+  "whois",
+  "dig",
+  "theHarvester",
+  "amass",
+  "dnsrecon",
+  "sublist3r",
+  "nikto",
+  "gobuster",
+  "whatweb",
+  "wpscan",
+  "sqlmap",
+  "searchsploit",
+  "msfconsole",
+  "hydra",
+  "john",
+  "hashcat",
+  "bash",
+]);
+
+export function startJob(
+  tool: string,
+  args: string[],
+  opts: { cwd?: string; executor?: ExecutorKind } = {},
+): JobMeta {
+  const executor = opts.executor ?? "local";
+  const whitelist = executor === "kali" ? ALLOWED_KALI_TOOLS : ALLOWED_TOOLS;
+  if (!whitelist.has(tool)) {
+    throw new Error(`tool "${tool}" is not in the ${executor} execution whitelist`);
   }
 
   const id = randomUUID();
@@ -39,6 +72,7 @@ export function startJob(tool: string, args: string[], opts: { cwd?: string } = 
     id,
     tool,
     args,
+    executor,
     status: "running",
     exitCode: null,
     startedAt: Date.now(),
@@ -49,9 +83,19 @@ export function startJob(tool: string, args: string[], opts: { cwd?: string } = 
   };
   jobs.set(id, job);
 
-  // spawn() with an argument array never invokes a shell, so nothing in
-  // `args` (including validated targets) can be interpreted as shell syntax.
-  const child = spawn(tool, args, {
+  // Local: spawn() with an argument array never invokes a shell, so nothing
+  // in `args` can be interpreted as shell syntax. Kali: the logical tool and
+  // args get shell-quoted into one SSH command line (see lib/ssh.ts) — the
+  // locally-spawned process is always the fixed "ssh" binary either way.
+  const [spawnCommand, spawnArgs] =
+    executor === "kali"
+      ? (() => {
+          const invocation = buildSshInvocation(tool, args);
+          return [invocation.command, invocation.args] as const;
+        })()
+      : ([tool, args] as const);
+
+  const child = spawn(spawnCommand, spawnArgs, {
     shell: false,
     stdio: ["ignore", "pipe", "pipe"],
     cwd: opts.cwd,
@@ -74,9 +118,11 @@ export function startJob(tool: string, args: string[], opts: { cwd?: string } = 
     job.status = "error";
     job.endedAt = Date.now();
     const message =
-      err.code === "ENOENT"
-        ? `[nemesis] "${tool}" is not installed on this host — install it and try again.\n`
-        : `[nemesis] failed to launch "${tool}": ${err.message}\n`;
+      err.code === "ENOENT" && executor === "kali"
+        ? `[nemesis] "ssh" is not installed on this host — install an OpenSSH client to reach the Kali VM.\n`
+        : err.code === "ENOENT"
+          ? `[nemesis] "${tool}" is not installed on this host — install it and try again.\n`
+          : `[nemesis] failed to launch "${tool}": ${err.message}\n`;
     appendLine(job, message);
     job.emitter.emit("end");
   });
@@ -104,8 +150,8 @@ function appendLine(job: Job, text: string): void {
 }
 
 function toMeta(job: Job): JobMeta {
-  const { id, tool, args, status, exitCode, startedAt, endedAt } = job;
-  return { id, tool, args, status, exitCode, startedAt, endedAt };
+  const { id, tool, args, executor, status, exitCode, startedAt, endedAt } = job;
+  return { id, tool, args, executor, status, exitCode, startedAt, endedAt };
 }
 
 export function getJobMeta(id: string): JobMeta | undefined {

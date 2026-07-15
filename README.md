@@ -10,6 +10,7 @@ A personal offensive-security & development console, built by **injexion.io**. T
 - **A workshop-HUD frontend** (React + Vite + TypeScript) modeled on the Mark II/III Iron Man interface: an arc-reactor-style dial with a live clock and status readout, a rotating wireframe hologram at its center (WebGL/three.js), angular corner-bracketed panels, and drifting light motes across the backdrop — all in the injexion.io cyan/red palette.
 - **A voice interface**: NEMESIS speaks job status aloud, and a push-to-talk mic accepts a small command grammar ("quick scan example.com", "git status", "find subdomains for target.com").
 - **A genuine external-display mode**: open a mirrored, receive-only HUD in a second window — real second-monitor placement where the browser supports it (Window Management API), a plain draggable popup everywhere else — synced live via `BroadcastChannel` to whatever's running in the primary console.
+- **Kali Linux integration, at the OS and VM level**: connect a Kali box over SSH and NEMESIS can run a real, curated slice of the Kali toolset on it — recon/OSINT, web app testing, vuln scanning, and scope-gated credential auditing — streamed back live exactly like the local tools.
 - **Security-first by construction**: every offensive-tool route validates its target against a strict hostname/IP grammar, every process is launched via `spawn()` with an argument array (never a shell string, so there is no injection surface), scan flags come from a fixed server-side whitelist of profiles (never raw user flags), every API call requires a bearer key, and there's a client-side authorization checkbox that gates recon actions — including by voice.
 
 ## Architecture
@@ -33,6 +34,56 @@ nemesis/
 - **HUD core**: the centerpiece dial (`web/src/components/HudCore.tsx`) renders concentric tick/dashed rings in CSS/SVG around a `three.js` wireframe hologram (`web/src/three/Hologram.tsx`). The hologram shape itself reacts to what's running — an icosahedron core at idle, a wireframe globe while a scan is active, a torus knot while a git job runs. three.js is lazy-loaded on first mount so it never blocks the initial page load.
 - **Voice**: `web/src/voice/speech.ts` wraps the Web Speech API for output (toggle in the voice dock), `web/src/voice/parseCommand.ts` is the small closed-vocabulary grammar for push-to-talk input, and `web/src/voice/commandBus.ts` dispatches parsed commands to whichever panel owns that action — so voice and buttons share one code path.
 - **External display**: click **⧉ external display** in the header. `web/src/sync/externalWindow.ts` tries the [Window Management API](https://developer.mozilla.org/en-US/docs/Web/API/Window_Management_API) to place the new window on a secondary monitor and size it to fill it; if that permission isn't granted (or the browser doesn't support it), it falls back to a normal popup you can drag over yourself and click "fullscreen" on. Once open, `?display=external` in the URL switches to `web/src/ExternalDisplay.tsx` — a receive-only mirror that never runs actions itself, fed live by `web/src/sync/bus.ts` (`BroadcastChannel`, same-origin/same-browser only, so it adds no new network exposure). Panels broadcast their own state (`ReconPanel`, `DevPanel`, `SystemPanel`, `VoiceDock`); the external view — and the primary dashboard's own hologram — just subscribe.
+
+## Kali Linux integration
+
+NEMESIS itself runs on your host machine (laptop, desktop, or a server you control) and reaches your Kali box over SSH — it does not need to run on Kali, and doesn't touch the host OS's package manager or anything at the OS level beyond spawning `ssh`. This keeps the attack tooling isolated in the VM, which is how most people actually use Kali.
+
+### Setting it up
+
+```bash
+# 1. On the Kali VM: make sure SSH is enabled
+sudo systemctl enable --now ssh
+
+# 2. On your host: generate a dedicated keypair (don't reuse a personal one)
+ssh-keygen -t ed25519 -f ~/.ssh/nemesis_kali -N ""
+ssh-copy-id -i ~/.ssh/nemesis_kali.pub kali@<your-vm-ip>
+
+# 3. On the Kali VM: create the workspace directory the credential-audit
+#    tools read hash files from
+mkdir -p ~/nemesis-workspace
+```
+
+Then in `server/.env`:
+
+```bash
+KALI_SSH_HOST=<your-vm-ip>
+KALI_SSH_PORT=22
+KALI_SSH_USER=kali
+KALI_SSH_KEY_PATH=/home/you/.ssh/nemesis_kali
+KALI_WORK_DIR=/home/kali/nemesis-workspace
+```
+
+Restart the server, open the **Kali VM Uplink** panel, and click **check connection & tool inventory** — it runs a real SSH command and reports which of the registered tools are actually installed on the box.
+
+Password auth is intentionally not supported — key-based only. `ssh` itself is the only thing NEMESIS spawns locally for these jobs; every tool and argument is shell-quoted into one command line the same way a hand-typed SSH command would be (see `server/src/lib/ssh.ts`), and only binaries in a fixed allowlist can ever be named.
+
+### The toolset, by risk tier
+
+| Tier | Tools | Gate |
+|---|---|---|
+| **Recon / OSINT** | theHarvester, amass (passive-only), dnsrecon, Sublist3r, searchsploit, Metasploit module search | authorization checkbox (same as nmap/whois/dig) |
+| **Web app testing** | Nikto, gobuster (curated wordlists only), WhatWeb, WPScan | authorization checkbox |
+| **Vulnerability scanning** | nmap `--script vuln`, sqlmap (hardcoded to `--level=1 --risk=1 --banner` — detection only, `--dump`/`--os-shell`/etc. are never reachable) | authorization checkbox **+ Engagement Scope confirmed** |
+| **Credential audit** | Hydra (single username/password test, not wordlist spraying), John the Ripper, hashcat (both operate on a hash file you place in `KALI_WORK_DIR` — no live target) | Engagement Scope confirmed |
+
+**Engagement Scope** is a deliberate extra gate for the last two tiers: type a description of what you're authorized to test and the exact phrase "I AM AUTHORIZED" in the **Engagement Scope** panel, and those tools unlock for 4 hours (`SCOPE_DURATION_MS`). It's enforced server-side (`server/src/lib/engagementScope.ts`), not just hidden in the UI — the API rejects the request with a 403 if scope isn't active, same as it rejects a malformed target.
+
+The existing nmap/whois/dig routes also gained a **local / Kali VM** toggle in the Recon Module, so those specific tools can run from either side.
+
+### What's deliberately not wired up
+
+Wireless attack tools (`airmon-ng`/`airodump-ng`/`aireplay-ng`/`aircrack-ng`), traffic interception tools (Responder, Bettercap), and Metasploit *exploit execution* (as opposed to module search) aren't exposed as one-click actions here. Unlike everything above, none of these have a single "target" that scopes the action to one consented asset — wireless capture/injection affects every device in radio range, LAN-wide MITM affects every host on the segment, and a generic "run any exploit module" button is a different category of capability than a curated recon/scan toolset. They remain manual work you do directly in the Kali VM, which the SSH connection gives you full access to anyway — NEMESIS just doesn't automate that specific slice.
 
 ## Getting started
 
@@ -75,7 +126,8 @@ Other things worth knowing before you expose this beyond `localhost`:
 
 ## Extending it
 
-- **More recon tools**: add the binary to the `ALLOWED_TOOLS` whitelist in `server/src/lib/jobs.ts`, add a validated route in `server/src/routes/`, wire a button in `web/src/components/ReconPanel.tsx`.
+- **More recon tools (local)**: add the binary to the `ALLOWED_TOOLS` whitelist in `server/src/lib/jobs.ts`, add a validated route in `server/src/routes/`, wire a button in `web/src/components/ReconPanel.tsx`.
+- **More Kali tools**: add an entry to `KALI_TOOL_REGISTRY` in `server/src/lib/kaliTools.ts` (binary, risk tier, a `build()` function that validates its inputs with the helpers in `server/src/lib/validate.ts`), add the binary name to `ALLOWED_KALI_TOOLS` in `server/src/lib/jobs.ts`, then wire a button/field in `web/src/components/KaliToolsPanel.tsx`. No new route needed — `/api/kali-tools/:id/run` is generic.
 - **A real conversational assistant**: the module/job pattern here is intentionally generic — plugging in an LLM (e.g. the Claude API) as a "brain" that calls these same job endpoints as tools is a natural next step, deliberately left out of this build so the execution layer stays auditable on its own.
 
 ---

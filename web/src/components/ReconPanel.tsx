@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, ApiError } from "../api.js";
+import { api, ApiError, type Executor } from "../api.js";
 import { onCommand } from "../voice/commandBus.js";
 import { speak } from "../voice/speech.js";
 import { useJob } from "../hooks/useJob.js";
@@ -16,10 +16,11 @@ const NMAP_PROFILES = [
 
 const DIG_TYPES = ["A", "AAAA", "MX", "TXT", "NS", "CNAME", "SOA", "ANY"];
 
-export function ReconPanel() {
+export function ReconPanel({ kaliEnabled, scopeActive }: { kaliEnabled: boolean; scopeActive: boolean }) {
   const [target, setTarget] = useState("");
   const [recordType, setRecordType] = useState("A");
   const [authorized, setAuthorized] = useState(false);
+  const [executor, setExecutor] = useState<Executor>("local");
   const job = useJob();
   const [subError, setSubError] = useState<string | null>(null);
   const [subdomains, setSubdomains] = useState<string[] | null>(null);
@@ -65,7 +66,7 @@ export function ReconPanel() {
         }
         const label = NMAP_PROFILES.find((p) => p.id === profile)?.label ?? profile;
         speak(`Copy. Running ${label} scan on ${t}.`);
-        job.run(() => api.nmap(t, profile), `${label} scan`);
+        job.run(() => api.nmap(t, profile, executor), `${label} scan`);
       }),
       onCommand("recon.whois", ({ target: t }) => {
         setTarget(t);
@@ -74,7 +75,7 @@ export function ReconPanel() {
           return;
         }
         speak(`Pulling whois records for ${t}.`);
-        job.run(() => api.whois(t), "Whois lookup");
+        job.run(() => api.whois(t, executor), "Whois lookup");
       }),
       onCommand("recon.dig", ({ target: t, recordType: rt }) => {
         setTarget(t);
@@ -84,7 +85,7 @@ export function ReconPanel() {
           return;
         }
         speak(`Resolving ${rt} records for ${t}.`);
-        job.run(() => api.dig(t, rt), "DNS lookup");
+        job.run(() => api.dig(t, rt, executor), "DNS lookup");
       }),
       onCommand("recon.subdomains", ({ target: t }) => {
         setTarget(t);
@@ -98,7 +99,7 @@ export function ReconPanel() {
     ];
     return () => unsubscribers.forEach((off) => off());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authorized]);
+  }, [authorized, executor]);
 
   return (
     <ModuleCard title="Recon Module" tag="OFFENSIVE">
@@ -109,6 +110,12 @@ export function ReconPanel() {
           value={target}
           onChange={(e) => setTarget(e.target.value)}
         />
+        {kaliEnabled && (
+          <select value={executor} onChange={(e) => setExecutor(e.target.value as Executor)} style={{ flex: "none" }}>
+            <option value="local">run: local</option>
+            <option value="kali">run: Kali VM</option>
+          </select>
+        )}
       </div>
 
       <label className="authorize">
@@ -124,15 +131,22 @@ export function ReconPanel() {
           <button
             key={p.id}
             disabled={!canRun}
-            onClick={() => job.run(() => api.nmap(target.trim(), p.id), `${p.label} scan`)}
+            onClick={() => job.run(() => api.nmap(target.trim(), p.id, executor), `${p.label} scan`)}
           >
             nmap · {p.label}
           </button>
         ))}
+        <button
+          disabled={!canRun || !scopeActive}
+          title={scopeActive ? undefined : "Confirm Engagement Scope first"}
+          onClick={() => job.run(() => api.nmap(target.trim(), "vuln", executor), "nmap vuln scan")}
+        >
+          nmap · vuln scripts {scopeActive ? "" : "🔒"}
+        </button>
       </div>
 
       <div className="row">
-        <button disabled={!canRun} onClick={() => job.run(() => api.whois(target.trim()), "Whois lookup")}>
+        <button disabled={!canRun} onClick={() => job.run(() => api.whois(target.trim(), executor), "Whois lookup")}>
           whois
         </button>
         <select value={recordType} onChange={(e) => setRecordType(e.target.value)} disabled={!authorized}>
@@ -144,7 +158,7 @@ export function ReconPanel() {
         </select>
         <button
           disabled={!canRun}
-          onClick={() => job.run(() => api.dig(target.trim(), recordType), "DNS lookup")}
+          onClick={() => job.run(() => api.dig(target.trim(), recordType, executor), "DNS lookup")}
         >
           dig
         </button>

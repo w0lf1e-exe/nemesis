@@ -26,7 +26,24 @@ export const config = {
   devRepoPath: process.env.DEV_REPO_PATH?.trim() || process.cwd(),
   jobTimeoutMs: Number(process.env.JOB_TIMEOUT_MS ?? 300_000),
   jobMaxOutputBytes: Number(process.env.JOB_MAX_OUTPUT_BYTES ?? 2_000_000),
+  kali: {
+    enabled: Boolean(process.env.KALI_SSH_HOST?.trim()),
+    host: process.env.KALI_SSH_HOST?.trim() ?? "",
+    port: Number(process.env.KALI_SSH_PORT ?? 22),
+    user: process.env.KALI_SSH_USER?.trim() || "kali",
+    keyPath: process.env.KALI_SSH_KEY_PATH?.trim() ?? "",
+    workDir: process.env.KALI_WORK_DIR?.trim() || "/home/kali/nemesis-workspace",
+  },
+  scopeDurationMs: Number(process.env.SCOPE_DURATION_MS ?? 4 * 60 * 60 * 1000),
 };
+
+if (config.kali.enabled && !config.kali.keyPath) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    "[nemesis] KALI_SSH_HOST is set but KALI_SSH_KEY_PATH is not — SSH connections to the Kali VM will fail " +
+      "without a key (password auth is intentionally not supported).",
+  );
+}
 
 if (!process.env.NEMESIS_API_KEY || process.env.NEMESIS_API_KEY === "change-me-to-a-long-random-secret") {
   // eslint-disable-next-line no-console
