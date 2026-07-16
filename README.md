@@ -102,6 +102,11 @@ API_REFERENCE.md for why that's safe and what it doesn't expose), point that
 frontend's API base URL at `http://localhost:4317`, and have it send the same
 bearer key this console uses.
 
+For a Lovable-built frontend specifically, [`docs/lovable-client/`](docs/lovable-client/)
+has three ready-to-paste files (API client, a streaming-job hook, and a full
+Kali-tools panel component) plus exact steps to wire them in — no new
+dependencies required.
+
 ## Getting started
 
 This is a personal tool meant to run **on your own machine** — its recon module fires real scans from your real network, and its dev module reads your real local git repos. Requires [Node.js](https://nodejs.org) 20+.
